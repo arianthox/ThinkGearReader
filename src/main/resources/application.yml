@@ -1,0 +1,29 @@
+server:
+  port: 8004
+  servlet:
+    context-path: /
+spring:
+  application:
+    name: ThinkGearReader
+  main:
+    allow-bean-definition-overriding: true
+
+thinkGearConnector:
+  format: Json
+  raw: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"
+
+info:
+  # static properties
+  app:
+    name: ${spring.application.name}
+    description: --
+
+logging:
+  level:
+    root: info
