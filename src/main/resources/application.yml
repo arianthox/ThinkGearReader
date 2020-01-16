@@ -9,8 +9,12 @@ spring:
     allow-bean-definition-overriding: true
 
 thinkGearConnector:
+  port: 13854
+  host: "127.0.0.1"
   format: Json
   raw: true
+  authMessage: "{\"appName\":\"%s\",\"appKey\":\"%s\"}\n"
+  switchMessage: "{\"enableRawOutput\":%s,\"format\":\"%s\"}\n"
 
 management:
   endpoints:

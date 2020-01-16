@@ -7,8 +7,6 @@ public class EEGPowerPacket implements  Packet{
 
     private long delta,theta,lowAlpha,highAlpha,lowBeta,highBeta,lowGamma,highGamma;
 
-
-
     public EEGPowerPacket setDelta(long delta) {
         this.delta = delta;        return this;
 
