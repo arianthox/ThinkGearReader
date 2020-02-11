@@ -5,9 +5,9 @@ import java.util.HashMap;
 
 public class FamiliarityPacket implements Packet{
 
-    private int familiarity;
+    private double familiarity;
 
-    public int getFamiliarity() {
+    public double getFamiliarity() {
         return familiarity;
     }
 

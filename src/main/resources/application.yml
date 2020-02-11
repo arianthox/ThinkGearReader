@@ -31,3 +31,4 @@ info:
 logging:
   level:
     root: info
+    com.globant.brainwaves.adapter: info

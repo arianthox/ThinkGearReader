@@ -6,9 +6,9 @@ import java.util.HashMap;
  * Created by root on 19.05.2017.
  */
 public class MentalEffortPacket implements Packet{
-    private int mentalEffort;
+    private double mentalEffort;
 
-    public int getMentalEffort() {
+    public double getMentalEffort() {
         return mentalEffort;
     }
 

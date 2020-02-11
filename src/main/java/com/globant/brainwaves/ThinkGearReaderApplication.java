@@ -13,18 +13,6 @@ import java.util.logging.Logger;
 @SpringBootApplication
 public class ThinkGearReaderApplication {
 
-    private static final Logger logger = Logger.getLogger(ThinkGearReaderApplication.class.getName());
-
-    private ThinkGearConnector thinkGearConnector;
-
-    public ThinkGearReaderApplication(@Autowired ThinkGearConnector thinkGearConnector){
-        this.thinkGearConnector=thinkGearConnector;
-        this.thinkGearConnector.registerEventHandler(in -> {
-            logger.info("Event:"+Collections.singletonList(in.toHashMap()).toString());
-        });
-        this.thinkGearConnector.start();
-    }
-
 
     public static void main(String[] args) {
         SpringApplication.run(ThinkGearReaderApplication.class, args);

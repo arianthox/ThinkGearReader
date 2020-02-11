@@ -7,21 +7,23 @@ import akka.stream.Materializer;
 import akka.stream.javadsl.*;
 import akka.util.ByteString;
 import com.globant.brainwaves.ThinkGearReaderApplication;
+import com.globant.brainwaves.model.EventListener;
 import com.globant.brainwaves.model.*;
 import com.globant.brainwaves.utils.Extend;
 import com.google.gson.Gson;
-import io.vavr.API;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import javax.annotation.PostConstruct;
-import java.util.ArrayList;
+import java.nio.charset.Charset;
 import java.util.List;
-import java.util.Optional;
-import java.util.Scanner;
+import java.util.*;
 import java.util.concurrent.CompletionStage;
+import java.util.function.*;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static com.globant.brainwaves.utils.Extend.isLike;
 import static io.vavr.API.*;
@@ -29,23 +31,63 @@ import static io.vavr.API.*;
 @Component
 public class ThinkGearConnector {
 
-    private static boolean debug = false;
+    private static final Logger logger = Logger.getLogger(ThinkGearConnector.class.getName());
 
     private static Gson gson = new Gson();
 
-    private String appName, sha_1;
+    private static List<EventListener> listeners = new ArrayList<>();
 
-    private static final Logger logger = Logger.getLogger(ThinkGearConnector.class.getName());
+    private static List<Integer> rawPacketBuffer = Collections.synchronizedList(new ArrayList<>());
+
+    private static final int MAX_RAW_BUFFER_SIZE = 512;
+
+    private static final Predicate<? super Packet> isRawPacket = packet -> packet instanceof RawPacket;
+
+    private static Function<RawPacket, Boolean> bufferRawPacket = packet -> {
+        rawPacketBuffer.add(packet.getRawEeg());
+        return rawPacketBuffer.size() >= MAX_RAW_BUFFER_SIZE;
+    };
+
+    private static final BiPredicate<Function<RawPacket, Boolean>, RawPacket> isRawBufferReady = (rawPacketBooleanFunction, rawPacket) -> rawPacketBooleanFunction.apply(rawPacket);
+
+    private static final Consumer<? super Packet> processConsumer = packet -> {
+        logger.log(packet.getLogLevel(),String.format("Event: %s - %s  - %s",packet.getLogLevel(), packet.getClass().getName(), Collections.singletonList(packet.toHashMap()).toString()));
+        listeners.forEach(eventListener -> eventListener.processPacket(packet));
+    };
+
+    private static final Function<List<Integer>, BufferRawPacket> newBufferRawPacket = buffer -> {
+        BufferRawPacket packet=new BufferRawPacket(buffer.stream().mapToInt(value -> value.intValue()).toArray());
+        rawPacketBuffer.clear();
+        return packet;
+    };
+
+    private static Function<? super Packet, Optional<Packet>> mainFlatMapperPacket = packet ->
+            Optional.of(
+                    isRawPacket.test(packet) && isRawBufferReady.test(bufferRawPacket, (RawPacket) packet) ?
+                        newBufferRawPacket.apply(rawPacketBuffer) :
+                        packet
+            );
+
+
+    private static Predicate<String> isPossibleRawPacket = s -> convertToBinary(s, "big5").contains("000000ff");
+
+    private static Consumer<String> unknownPacketConsumer = s -> {
+        logger.finer(String.format("UnknownEvent: %s", s));
+    };
+
+    private static Predicate<? super Class<? extends Packet>> unknownPacketPredicate = aClass -> aClass != UnknownPacket.class;
+
+    private static Function<String, String> convertToRaw = s -> String.format("{raw=%s}", Arrays.toString(s.getBytes()));
+
+    private static BiFunction<String, ? super Class<? extends Packet>, ? extends Packet> extractPacket = (s, aClass) -> ShortRawPacket.class.isAssignableFrom(aClass) ? gson.fromJson(convertToRaw.apply(s), aClass) : gson.fromJson(s, aClass);
+
+    private String appName, sha_1;
 
     private ActorSystem system = ActorSystem.create();
 
     private Materializer materializer = ActorMaterializer.create(system);
 
     private Flow<ByteString, ByteString, CompletionStage<Tcp.OutgoingConnection>> outgoingConnection;
-
-    private Flow<ByteString, ByteString, CompletionStage<Tcp.OutgoingConnection>> rawOutgoingConnection;
-
-    private static List<EventListener> listeners = new ArrayList<>();
 
     @Value("${thinkGearConnector.format}")
     private String format;
@@ -65,6 +107,7 @@ public class ThinkGearConnector {
     @Value("${thinkGearConnector.host}")
     private String host;
 
+
     public ThinkGearConnector() {
         this(ThinkGearReaderApplication.class.getName(), DigestUtils.sha1Hex(ThinkGearReaderApplication.class.getName()));
     }
@@ -78,7 +121,6 @@ public class ThinkGearConnector {
     private void init() {
         Tcp tcp = Tcp.get(system);
         outgoingConnection = tcp.outgoingConnection(this.host, this.port);
-        rawOutgoingConnection = tcp.outgoingConnection(this.host, this.port);
         start();
     }
 
@@ -94,16 +136,11 @@ public class ThinkGearConnector {
         this.writeJson(connection, String.format(switchMessage, enableRawOutput, format));
     }
 
-    public void start() {
+    private void start() {
         try {
             logger.info("Starting ThinkGear Connector");
             this.auth(outgoingConnection);
-            switchOutput(outgoingConnection, false, format);
-
-            if (raw) {
-                this.auth(rawOutgoingConnection);
-                switchOutput(rawOutgoingConnection, raw, format);
-            }
+            switchOutput(outgoingConnection, raw, format);
 
         } catch (Exception e) {
             logger.severe(e.getMessage());
@@ -114,47 +151,50 @@ public class ThinkGearConnector {
 
     private void writeJson(Flow<ByteString, ByteString, CompletionStage<Tcp.OutgoingConnection>> connection, String json) {
 
-        logger.info(String.format("write: %s" , json));
+        logger.fine(String.format("write: %s", json));
 
         Source<ByteString, NotUsed> source = Source.single(json).map(i -> ByteString.fromString(json));
         Source<ByteString, NotUsed> reply = source.via(connection);
         reply.toMat(Sink.foreach(ThinkGearConnector::process), Keep.right()).run(materializer).whenComplete((success, failure) -> {
             if (failure != null) {
-                logger.info(failure.getMessage());
+                logger.severe(failure.getMessage());
             }
             system.terminate();
         });
     }
 
+    private static String convertToBinary(String input, String encoding) {
+        byte[] encoded_input = Charset.forName(encoding)
+                .encode(input)
+                .array();
+        return IntStream.range(0, encoded_input.length)
+                .map(i -> encoded_input[i])
+                .mapToObj(e -> Integer.toHexString(e ^ 255))
+                .map(e -> String.format("%1$" + Byte.SIZE + "s", e).replace(" ", "0"))
+                .collect(Collectors.joining(" "));
+    }
+
 
     private static void process(ByteString x) {
 
-            Optional.of(x).map(ByteString::utf8String).map(Scanner::new).map(Extend::streamScanner).ifPresent(in -> {
-                if (debug) logger.finer("Debug:" + in);
-
-                in.filter(s -> s != null).forEach(s -> {
-                    Optional<Class<? extends Packet>> classOptional = Optional.of(
-                            Match(s).of(
-                                    Case($(isLike("status")), StatusPacket.class),
-                                    Case($(isLike("eSense")), ChannelPacket.class),
-                                    Case($(isLike("blink")), BlinkPacket.class),
-                                    Case($(isLike("mentalEffort")), MentalEffortPacket.class),
-                                    Case($(isLike("familiarity")), FamiliarityPacket.class),
-                                    Case($(isLike("raw")), RawPacket.class),
-                                    Case(API.$(), UnknownPacket.class)
-                            ));
-                    classOptional.filter(aClass -> aClass != UnknownPacket.class).ifPresent(aClass -> {
-                        try {
-                            Packet packet = gson.fromJson(s, aClass);
-                            listeners.forEach((p) -> p.processPacket(packet));
-                        } catch (Exception ex) {
-                            logger.warning(String.format("Exception:[%s] - [%s]", ex.getMessage(), s));
-                        }
-                    });
-                });
-
-
-            });
+        Optional.of(x).map(ByteString::utf8String).map(Scanner::new).map(Extend::streamScanner).filter(i -> i != null).ifPresent(stream ->
+                stream.forEachOrdered(s ->
+                        Optional.of(
+                                Match(s).of(
+                                        Case($(isLike("status")), StatusPacket.class),
+                                        Case($(isLike("eSense")), ChannelPacket.class),
+                                        Case($(isLike("blink")), BlinkPacket.class),
+                                        Case($(isLike("mentalEffort")), MentalEffortPacket.class),
+                                        Case($(isLike("familiarity")), FamiliarityPacket.class),
+                                        Case($(isLike("raw")), RawPacket.class),
+                                        //Case($(isPossibleRawPacket), ShortRawPacket.class),
+                                        Case($(), () -> {
+                                            unknownPacketConsumer.accept(s);
+                                            return UnknownPacket.class;
+                                        })
+                                )).filter(unknownPacketPredicate).map(aClass -> extractPacket.apply(s, aClass)).flatMap(mainFlatMapperPacket).ifPresent(processConsumer)
+                )
+        );
 
     }
 
