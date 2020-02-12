@@ -1,15 +1,47 @@
-stage 'build_Project'
-node{
+pipeline {
+  environment {
+      registry = "brainwaves/thinkgear-reader"
+      registryCredential = 'dockerhub'
+      dockerImage = ''
+  }
+  agent any
+  stages {
 
-  stage 'checkout'
+    stage('Cloning Git') {
+      steps {
+        checkout scm
+      }
+    }
 
-  checkout scm
+    stage('build_Project'){
+       steps{
+            sh './gradlew clean build'
+       }
+    }
 
-  stage 'build'
+    stage('Building image') {
+      steps{
+        script {
+          dockerImage = docker.build registry + ":$BUILD_NUMBER"
+        }
+      }
+    }
 
-  if(isUnix()){
-    sh './gradlew clean build'
-  } else {
-    bat 'gradlew.bat clean build'
+    stage('Deploy Image') {
+      steps{
+        script {
+          docker.withRegistry( '', registryCredential ) {
+            dockerImage.push()
+          }
+        }
+      }
+    }
+
+    stage('Remove Unused docker image') {
+      steps{
+        sh "docker rmi $registry:$BUILD_NUMBER"
+      }
+    }
+
   }
 }
