@@ -7,11 +7,13 @@ import akka.stream.Materializer;
 import akka.stream.javadsl.*;
 import akka.util.ByteString;
 import com.globant.brainwaves.ThinkGearReaderApplication;
+import com.globant.brainwaves.client.PacketClient;
 import com.globant.brainwaves.model.EventListener;
 import com.globant.brainwaves.model.*;
 import com.globant.brainwaves.utils.Extend;
 import com.google.gson.Gson;
 import org.apache.commons.codec.digest.DigestUtils;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -107,14 +109,18 @@ public class ThinkGearConnector {
     @Value("${thinkGearConnector.host}")
     private String host;
 
+    private PacketClient packetClient;
 
-    public ThinkGearConnector() {
-        this(ThinkGearReaderApplication.class.getName(), DigestUtils.sha1Hex(ThinkGearReaderApplication.class.getName()));
-    }
 
     private ThinkGearConnector(String appName, String SHA_1) {
         this.appName = appName;
         this.sha_1 = SHA_1;
+    }
+
+    @Autowired
+    public ThinkGearConnector(PacketClient packetClient) {
+        this(ThinkGearReaderApplication.class.getName(), DigestUtils.sha1Hex(ThinkGearReaderApplication.class.getName()));
+        this.packetClient = packetClient;
     }
 
     @PostConstruct
