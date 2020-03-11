@@ -8,12 +8,10 @@ spring:
   main:
     allow-bean-definition-overriding: true
 
-eureka:
-  client:
-    fetch-registry: true
-    register-with-eureka: true
-    service-url:
-      defaultZone: http://localhost:8001/eureka
+
+CoreEngine:
+  ribbon:
+    listOfServers: 127.0.0.1:8001
 
 feign:
   client:
@@ -23,7 +21,7 @@ feign:
         readTimeout: 10000
         loggerLevel: basic
 
-thinkGearConnector:
+think-gear-connector:
   port: 13854
   host: "127.0.0.1"
   format: Json

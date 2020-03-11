@@ -10,7 +10,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 
 import javax.validation.Valid;
 
-@FeignClient("CoreEngine")
+@FeignClient(name = "CoreEngine")
 @RequestMapping(value = "/api/core-engine/packet")
 public interface PacketClient {
 
