@@ -8,7 +8,7 @@ import akka.stream.Materializer;
 import akka.stream.javadsl.*;
 import akka.util.ByteString;
 import com.globant.brainwaves.ThinkGearReaderApplication;
-import com.globant.brainwaves.client.PacketClient;
+import com.globant.brainwaves.client.BufferRawPacketClient;
 import com.globant.brainwaves.model.EventListener;
 import com.globant.brainwaves.model.*;
 import com.globant.brainwaves.utils.Extend;
@@ -110,7 +110,7 @@ public class ThinkGearConnector {
     @Value("${think-gear-connector.host}")
     private String host;
 
-    private PacketClient packetClient;
+    private BufferRawPacketClient bufferRawPacketClient;
 
 
     private ThinkGearConnector(String appName, String SHA_1) {
@@ -119,9 +119,9 @@ public class ThinkGearConnector {
     }
 
     @Autowired
-    public ThinkGearConnector(PacketClient packetClient) {
+    public ThinkGearConnector(BufferRawPacketClient bufferRawPacketClient) {
         this(ThinkGearReaderApplication.class.getName(), DigestUtils.sha1Hex(ThinkGearReaderApplication.class.getName()));
-        this.packetClient = packetClient;
+        this.bufferRawPacketClient = bufferRawPacketClient;
     }
 
     @PostConstruct
@@ -132,7 +132,7 @@ public class ThinkGearConnector {
         this.registerEventHandler(p -> {
             try {
                 if (p instanceof BufferRawPacket) {
-                    packetClient.receive("ThinkGearReader", (BufferRawPacket) p);
+                    bufferRawPacketClient.receive("ThinkGearReader", (BufferRawPacket) p);
                 }
             }catch (Exception ex){
                 logger.warning(ex.getMessage());

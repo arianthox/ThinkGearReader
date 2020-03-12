@@ -9,11 +9,13 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 
 import javax.validation.Valid;
+import java.util.List;
 
 @FeignClient(name = "CoreEngine")
-@RequestMapping(value = "/api/core-engine/packet")
-public interface PacketClient {
+@RequestMapping(value = "/api/core-engine/packet/bufferrawpacket")
+public interface BufferRawPacketClient {
 
     @PostMapping("/receive/{deviceId}")
-    ResponseEntity receive(@PathVariable("deviceId") String id,@RequestBody @Valid BufferRawPacket packet);
+    ResponseEntity receive(@PathVariable("deviceId") String id,@RequestBody @Valid BufferRawPacket... packet);
+
 }
