@@ -1,15 +1,11 @@
 package com.globant.brainwaves;
 
-import com.globant.brainwaves.adapter.ThinkGearConnector;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.cloud.openfeign.EnableFeignClients;
 
-import javax.annotation.PostConstruct;
-import java.util.Collections;
-import java.util.function.Supplier;
-import java.util.logging.Logger;
 
+@EnableFeignClients
 @SpringBootApplication
 public class ThinkGearReaderApplication {
 

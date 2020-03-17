@@ -2,16 +2,19 @@ package com.globant.brainwaves.adapter;
 
 import akka.NotUsed;
 import akka.actor.ActorSystem;
+import akka.japi.pf.PFBuilder;
 import akka.stream.ActorMaterializer;
 import akka.stream.Materializer;
 import akka.stream.javadsl.*;
 import akka.util.ByteString;
 import com.globant.brainwaves.ThinkGearReaderApplication;
+import com.globant.brainwaves.client.BufferRawPacketClient;
 import com.globant.brainwaves.model.EventListener;
 import com.globant.brainwaves.model.*;
 import com.globant.brainwaves.utils.Extend;
 import com.google.gson.Gson;
 import org.apache.commons.codec.digest.DigestUtils;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -51,12 +54,12 @@ public class ThinkGearConnector {
     private static final BiPredicate<Function<RawPacket, Boolean>, RawPacket> isRawBufferReady = (rawPacketBooleanFunction, rawPacket) -> rawPacketBooleanFunction.apply(rawPacket);
 
     private static final Consumer<? super Packet> processConsumer = packet -> {
-        logger.log(packet.getLogLevel(),String.format("Event: %s - %s  - %s",packet.getLogLevel(), packet.getClass().getName(), Collections.singletonList(packet.toHashMap()).toString()));
+        logger.log(packet.getLogLevel(), String.format("Event: %s - %s  - %s", packet.getLogLevel(), packet.getClass().getName(), Collections.singletonList(packet.toHashMap()).toString()));
         listeners.forEach(eventListener -> eventListener.processPacket(packet));
     };
 
     private static final Function<List<Integer>, BufferRawPacket> newBufferRawPacket = buffer -> {
-        BufferRawPacket packet=new BufferRawPacket(buffer.stream().mapToInt(value -> value.intValue()).toArray());
+        BufferRawPacket packet = new BufferRawPacket(buffer.stream().mapToInt(value -> value.intValue()).toArray());
         rawPacketBuffer.clear();
         return packet;
     };
@@ -64,8 +67,8 @@ public class ThinkGearConnector {
     private static Function<? super Packet, Optional<Packet>> mainFlatMapperPacket = packet ->
             Optional.of(
                     isRawPacket.test(packet) && isRawBufferReady.test(bufferRawPacket, (RawPacket) packet) ?
-                        newBufferRawPacket.apply(rawPacketBuffer) :
-                        packet
+                            newBufferRawPacket.apply(rawPacketBuffer) :
+                            packet
             );
 
 
@@ -89,32 +92,39 @@ public class ThinkGearConnector {
 
     private Flow<ByteString, ByteString, CompletionStage<Tcp.OutgoingConnection>> outgoingConnection;
 
-    @Value("${thinkGearConnector.format}")
+    @Value("${think-gear-connector.format}")
     private String format;
 
-    @Value("${thinkGearConnector.raw}")
+    @Value("${think-gear-connector.raw}")
     private boolean raw;
 
-    @Value("${thinkGearConnector.authMessage}")
+    @Value("${think-gear-connector.authMessage}")
     private String authMessage;
 
-    @Value("${thinkGearConnector.switchMessage}")
+    @Value("${think-gear-connector.switchMessage}")
     private String switchMessage;
 
-    @Value("${thinkGearConnector.port}")
+    @Value("${think-gear-connector.port}")
     private int port;
 
-    @Value("${thinkGearConnector.host}")
+    @Value("${think-gear-connector.retries}")
+    private int retries;
+
+    @Value("${think-gear-connector.host}")
     private String host;
 
+    private BufferRawPacketClient bufferRawPacketClient;
 
-    public ThinkGearConnector() {
-        this(ThinkGearReaderApplication.class.getName(), DigestUtils.sha1Hex(ThinkGearReaderApplication.class.getName()));
-    }
 
     private ThinkGearConnector(String appName, String SHA_1) {
         this.appName = appName;
         this.sha_1 = SHA_1;
+    }
+
+    @Autowired
+    public ThinkGearConnector(BufferRawPacketClient bufferRawPacketClient) {
+        this(ThinkGearReaderApplication.class.getName(), DigestUtils.sha1Hex(ThinkGearReaderApplication.class.getName()));
+        this.bufferRawPacketClient = bufferRawPacketClient;
     }
 
     @PostConstruct
@@ -122,6 +132,16 @@ public class ThinkGearConnector {
         Tcp tcp = Tcp.get(system);
         outgoingConnection = tcp.outgoingConnection(this.host, this.port);
         start();
+        this.registerEventHandler(p -> {
+            try {
+                if (p instanceof BufferRawPacket) {
+                    bufferRawPacketClient.receive("ThinkGearReader", (BufferRawPacket) p);
+                }
+            }catch (Exception ex){
+                logger.warning(ex.getMessage());
+            }
+
+        });
     }
 
     public void registerEventHandler(EventListener e) {
@@ -155,12 +175,14 @@ public class ThinkGearConnector {
 
         Source<ByteString, NotUsed> source = Source.single(json).map(i -> ByteString.fromString(json));
         Source<ByteString, NotUsed> reply = source.via(connection);
-        reply.toMat(Sink.foreach(ThinkGearConnector::process), Keep.right()).run(materializer).whenComplete((success, failure) -> {
-            if (failure != null) {
-                logger.severe(failure.getMessage());
-            }
-            system.terminate();
-        });
+
+        reply
+                .recoverWithRetries(retries,
+                        new PFBuilder().match(RuntimeException.class, ex -> source).build()
+                )
+                .toMat(Sink.foreach(ThinkGearConnector::process), Keep.right())
+                .run(materializer);
+
     }
 
     private static String convertToBinary(String input, String encoding) {
@@ -187,7 +209,6 @@ public class ThinkGearConnector {
                                         Case($(isLike("mentalEffort")), MentalEffortPacket.class),
                                         Case($(isLike("familiarity")), FamiliarityPacket.class),
                                         Case($(isLike("raw")), RawPacket.class),
-                                        //Case($(isPossibleRawPacket), ShortRawPacket.class),
                                         Case($(), () -> {
                                             unknownPacketConsumer.accept(s);
                                             return UnknownPacket.class;

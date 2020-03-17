@@ -8,11 +8,25 @@ spring:
   main:
     allow-bean-definition-overriding: true
 
-thinkGearConnector:
+
+CoreEngine:
+  ribbon:
+    listOfServers: 127.0.0.1:8001
+
+feign:
+  client:
+    config:
+      default:
+        connectTimeout: 5000
+        readTimeout: 10000
+        loggerLevel: basic
+
+think-gear-connector:
   port: 13854
   host: "127.0.0.1"
   format: Json
   raw: true
+  retries: 1024
   authMessage: "{\"appName\":\"%s\",\"appKey\":\"%s\"}\n"
   switchMessage: "{\"enableRawOutput\":%s,\"format\":\"%s\"}\n"
 
