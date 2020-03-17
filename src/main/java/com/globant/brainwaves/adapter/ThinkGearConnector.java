@@ -107,6 +107,9 @@ public class ThinkGearConnector {
     @Value("${think-gear-connector.port}")
     private int port;
 
+    @Value("${think-gear-connector.retries}")
+    private int retries;
+
     @Value("${think-gear-connector.host}")
     private String host;
 
@@ -174,18 +177,12 @@ public class ThinkGearConnector {
         Source<ByteString, NotUsed> reply = source.via(connection);
 
         reply
-                .recoverWithRetries(1024,
+                .recoverWithRetries(retries,
                         new PFBuilder().match(RuntimeException.class, ex -> source).build()
                 )
                 .toMat(Sink.foreach(ThinkGearConnector::process), Keep.right())
                 .run(materializer);
 
-//                .whenComplete((success, failure) -> {
-//                    if (failure != null) {
-//                        logger.severe(failure.getMessage());
-//                    }
-//                    system.terminate();
-//                });
     }
 
     private static String convertToBinary(String input, String encoding) {
@@ -212,7 +209,6 @@ public class ThinkGearConnector {
                                         Case($(isLike("mentalEffort")), MentalEffortPacket.class),
                                         Case($(isLike("familiarity")), FamiliarityPacket.class),
                                         Case($(isLike("raw")), RawPacket.class),
-                                        //Case($(isPossibleRawPacket), ShortRawPacket.class),
                                         Case($(), () -> {
                                             unknownPacketConsumer.accept(s);
                                             return UnknownPacket.class;

@@ -26,6 +26,7 @@ think-gear-connector:
   host: "127.0.0.1"
   format: Json
   raw: true
+  retries: 1024
   authMessage: "{\"appName\":\"%s\",\"appKey\":\"%s\"}\n"
   switchMessage: "{\"enableRawOutput\":%s,\"format\":\"%s\"}\n"
 
