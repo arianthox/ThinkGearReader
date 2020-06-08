@@ -12,7 +12,7 @@ import javax.validation.Valid;
 import java.util.List;
 
 @FeignClient(name = "CoreEngine")
-@RequestMapping(value = "/api/core-engine/packet/bufferrawpacket")
+@RequestMapping(value = "/api/core-engine/packet/raw")
 public interface BufferRawPacketClient {
 
     @PostMapping("/receive/{deviceId}")

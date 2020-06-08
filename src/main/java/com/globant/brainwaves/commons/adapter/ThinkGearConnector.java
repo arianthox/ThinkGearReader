@@ -1,4 +1,4 @@
-package com.globant.brainwaves.adapter;
+package com.globant.brainwaves.commons.adapter;
 
 import akka.NotUsed;
 import akka.actor.ActorSystem;
