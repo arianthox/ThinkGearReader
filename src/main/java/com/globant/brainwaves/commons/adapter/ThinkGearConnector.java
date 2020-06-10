@@ -8,7 +8,7 @@ import akka.stream.Materializer;
 import akka.stream.javadsl.*;
 import akka.util.ByteString;
 import com.globant.brainwaves.ThinkGearReaderApplication;
-import com.globant.brainwaves.client.BufferRawPacketClient;
+import com.globant.brainwaves.client.CoreEngineClient;
 import com.globant.brainwaves.model.EventListener;
 import com.globant.brainwaves.model.*;
 import com.globant.brainwaves.utils.Extend;
@@ -113,7 +113,7 @@ public class ThinkGearConnector {
     @Value("${think-gear-connector.host}")
     private String host;
 
-    private BufferRawPacketClient bufferRawPacketClient;
+    private CoreEngineClient coreEngineClient;
 
 
     private ThinkGearConnector(String appName, String SHA_1) {
@@ -122,20 +122,23 @@ public class ThinkGearConnector {
     }
 
     @Autowired
-    public ThinkGearConnector(BufferRawPacketClient bufferRawPacketClient) {
+    public ThinkGearConnector(CoreEngineClient coreEngineClient) {
         this(ThinkGearReaderApplication.class.getName(), DigestUtils.sha1Hex(ThinkGearReaderApplication.class.getName()));
-        this.bufferRawPacketClient = bufferRawPacketClient;
+        this.coreEngineClient = coreEngineClient;
     }
 
     @PostConstruct
     private void init() {
         Tcp tcp = Tcp.get(system);
+        final String sessionId=UUID.randomUUID().toString();
         outgoingConnection = tcp.outgoingConnection(this.host, this.port);
         start();
         this.registerEventHandler(p -> {
             try {
                 if (p instanceof BufferRawPacket) {
-                    bufferRawPacketClient.receive("ThinkGearReader", (BufferRawPacket) p);
+                    coreEngineClient.receive("ThinkGearReader",sessionId, (BufferRawPacket) p);
+                }else if(p instanceof ChannelPacket){
+                    coreEngineClient.receive("ThinkGearReader",sessionId, (ChannelPacket) p);
                 }
             }catch (Exception ex){
                 logger.warning(ex.getMessage());
