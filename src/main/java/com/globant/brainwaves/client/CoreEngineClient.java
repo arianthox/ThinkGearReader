@@ -1,7 +1,7 @@
 package com.globant.brainwaves.client;
 
-import com.globant.brainwaves.model.BufferRawPacket;
-import com.globant.brainwaves.model.ChannelPacket;
+import com.globant.brainwaves.commons.model.BufferRawPacket;
+import com.globant.brainwaves.commons.model.ChannelPacket;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -10,7 +10,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 
 import javax.validation.Valid;
-import java.util.List;
 
 @FeignClient(name = "CoreEngine")
 @RequestMapping(value = "/api/core-engine")

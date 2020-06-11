@@ -9,10 +9,11 @@ import akka.stream.javadsl.*;
 import akka.util.ByteString;
 import com.globant.brainwaves.ThinkGearReaderApplication;
 import com.globant.brainwaves.client.CoreEngineClient;
+import com.globant.brainwaves.commons.model.*;
 import com.globant.brainwaves.model.EventListener;
-import com.globant.brainwaves.model.*;
 import com.globant.brainwaves.utils.Extend;
 import com.google.gson.Gson;
+import lombok.extern.java.Log;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -24,18 +25,17 @@ import java.util.List;
 import java.util.*;
 import java.util.concurrent.CompletionStage;
 import java.util.function.*;
-import java.util.logging.Logger;
+import java.util.logging.Level;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import static com.globant.brainwaves.utils.Extend.isLike;
 import static io.vavr.API.*;
 
+@Log
 @Component
 public class ThinkGearConnector {
-
-    private static final Logger logger = Logger.getLogger(ThinkGearConnector.class.getName());
-
+    
     private static Gson gson = new Gson();
 
     private static List<EventListener> listeners = new ArrayList<>();
@@ -54,7 +54,7 @@ public class ThinkGearConnector {
     private static final BiPredicate<Function<RawPacket, Boolean>, RawPacket> isRawBufferReady = (rawPacketBooleanFunction, rawPacket) -> rawPacketBooleanFunction.apply(rawPacket);
 
     private static final Consumer<? super Packet> processConsumer = packet -> {
-        logger.log(packet.getLogLevel(), String.format("Event: %s - %s  - %s", packet.getLogLevel(), packet.getClass().getName(), Collections.singletonList(packet.toHashMap()).toString()));
+        log.log(Level.FINE, String.format("Event: %s  - %s",  packet.getClass().getName(), Collections.singletonList(packet.toHashMap()).toString()));
         listeners.forEach(eventListener -> eventListener.processPacket(packet));
     };
 
@@ -75,7 +75,7 @@ public class ThinkGearConnector {
     private static Predicate<String> isPossibleRawPacket = s -> convertToBinary(s, "big5").contains("000000ff");
 
     private static Consumer<String> unknownPacketConsumer = s -> {
-        logger.finer(String.format("UnknownEvent: %s", s));
+        log.finer(String.format("UnknownEvent: %s", s));
     };
 
     private static Predicate<? super Class<? extends Packet>> unknownPacketPredicate = aClass -> aClass != UnknownPacket.class;
@@ -84,36 +84,38 @@ public class ThinkGearConnector {
 
     private static BiFunction<String, ? super Class<? extends Packet>, ? extends Packet> extractPacket = (s, aClass) -> ShortRawPacket.class.isAssignableFrom(aClass) ? gson.fromJson(convertToRaw.apply(s), aClass) : gson.fromJson(s, aClass);
 
-    private String appName, sha_1;
+    private transient String appName, sha_1;
 
-    private ActorSystem system = ActorSystem.create();
+    private transient ActorSystem system = ActorSystem.create();
 
-    private Materializer materializer = ActorMaterializer.create(system);
+    private transient Materializer materializer = ActorMaterializer.create(system);
 
-    private Flow<ByteString, ByteString, CompletionStage<Tcp.OutgoingConnection>> outgoingConnection;
+    private transient Flow<ByteString, ByteString, CompletionStage<Tcp.OutgoingConnection>> outgoingConnection;
 
     @Value("${think-gear-connector.format}")
-    private String format;
+    private transient String format;
 
     @Value("${think-gear-connector.raw}")
-    private boolean raw;
+    private transient boolean raw;
 
     @Value("${think-gear-connector.authMessage}")
-    private String authMessage;
+    private transient String authMessage;
 
     @Value("${think-gear-connector.switchMessage}")
-    private String switchMessage;
+    private transient String switchMessage;
 
     @Value("${think-gear-connector.port}")
-    private int port;
+    private transient int port;
 
     @Value("${think-gear-connector.retries}")
-    private int retries;
+    private transient int retries;
 
     @Value("${think-gear-connector.host}")
-    private String host;
+    private transient String host;
 
-    private CoreEngineClient coreEngineClient;
+    private transient CoreEngineClient coreEngineClient;
+
+    private final String sessionId=UUID.randomUUID().toString();
 
 
     private ThinkGearConnector(String appName, String SHA_1) {
@@ -130,7 +132,6 @@ public class ThinkGearConnector {
     @PostConstruct
     private void init() {
         Tcp tcp = Tcp.get(system);
-        final String sessionId=UUID.randomUUID().toString();
         outgoingConnection = tcp.outgoingConnection(this.host, this.port);
         start();
         this.registerEventHandler(p -> {
@@ -141,7 +142,7 @@ public class ThinkGearConnector {
                     coreEngineClient.receive("ThinkGearReader",sessionId, (ChannelPacket) p);
                 }
             }catch (Exception ex){
-                logger.warning(ex.getMessage());
+                log.warning(ex.getMessage());
             }
 
         });
@@ -161,12 +162,12 @@ public class ThinkGearConnector {
 
     private void start() {
         try {
-            logger.info("Starting ThinkGear Connector");
+            log.info("Starting ThinkGear Connector");
             this.auth(outgoingConnection);
             switchOutput(outgoingConnection, raw, format);
 
         } catch (Exception e) {
-            logger.severe(e.getMessage());
+            log.severe(e.getMessage());
         }
 
     }
@@ -174,7 +175,7 @@ public class ThinkGearConnector {
 
     private void writeJson(Flow<ByteString, ByteString, CompletionStage<Tcp.OutgoingConnection>> connection, String json) {
 
-        logger.fine(String.format("write: %s", json));
+        log.fine(String.format("write: %s", json));
 
         Source<ByteString, NotUsed> source = Source.single(json).map(i -> ByteString.fromString(json));
         Source<ByteString, NotUsed> reply = source.via(connection);

@@ -20,8 +20,8 @@ ext {
     set('springCloudVersion', "Hoxton.RC2")
 }
 
-sourceCompatibility = JavaVersion.VERSION_1_8
-targetCompatibility = JavaVersion.VERSION_1_8
+sourceCompatibility = JavaVersion.VERSION_11
+targetCompatibility = JavaVersion.VERSION_11
 
 configurations {
     developmentOnly
@@ -47,15 +47,15 @@ dependencies {
     implementation 'com.lightbend.akka:akka-stream-alpakka-udp_2.12:1.1.2'
     implementation 'org.springframework.cloud:spring-cloud-starter-openfeign'
     implementation 'org.json:json:20190722'
+    implementation project(":commons")
     implementation 'com.google.code.gson:gson:2.8.0'
     implementation 'net.sf.bluecove:bluecove:2.1.0'
     implementation 'org.rxtx:rxtx:2.1.7'
     implementation 'commons-codec:commons-codec:1.13'
     implementation 'io.vavr:vavr:0.10.2'
-
     compileOnly 'org.projectlombok:lombok'
-    developmentOnly 'org.springframework.boot:spring-boot-devtools'
     annotationProcessor 'org.projectlombok:lombok'
+    developmentOnly 'org.springframework.boot:spring-boot-devtools'
     testImplementation('org.springframework.boot:spring-boot-starter-test') {
         exclude group: 'org.junit.vintage', module: 'junit-vintage-engine'
     }
