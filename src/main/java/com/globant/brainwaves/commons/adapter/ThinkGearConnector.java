@@ -1,10 +1,12 @@
 package com.globant.brainwaves.commons.adapter;
 
-import akka.NotUsed;
+
 import akka.actor.ActorSystem;
 import akka.japi.pf.PFBuilder;
+import akka.stream.ActorAttributes;
 import akka.stream.ActorMaterializer;
 import akka.stream.Materializer;
+import akka.stream.Supervision;
 import akka.stream.javadsl.*;
 import akka.util.ByteString;
 import com.globant.brainwaves.ThinkGearReaderApplication;
@@ -24,6 +26,7 @@ import java.nio.charset.Charset;
 import java.util.List;
 import java.util.*;
 import java.util.concurrent.CompletionStage;
+import java.util.function.Function;
 import java.util.function.*;
 import java.util.logging.Level;
 import java.util.stream.Collectors;
@@ -54,7 +57,7 @@ public class ThinkGearConnector {
     private static final BiPredicate<Function<RawPacket, Boolean>, RawPacket> isRawBufferReady = (rawPacketBooleanFunction, rawPacket) -> rawPacketBooleanFunction.apply(rawPacket);
 
     private static final Consumer<? super Packet> processConsumer = packet -> {
-        log.log(Level.FINE, String.format("Event: %s  - %s",  packet.getClass().getName(), Collections.singletonList(packet.toHashMap()).toString()));
+        log.log(packet.getLogLevel(), String.format("%s [%s]",  packet.getClass().getSimpleName(), packet));
         listeners.forEach(eventListener -> eventListener.processPacket(packet));
     };
 
@@ -115,7 +118,7 @@ public class ThinkGearConnector {
 
     private transient CoreEngineClient coreEngineClient;
 
-    private final String sessionId=UUID.randomUUID().toString();
+    private final static String sessionId=UUID.randomUUID().toString();
 
 
     private ThinkGearConnector(String appName, String SHA_1) {
@@ -172,18 +175,24 @@ public class ThinkGearConnector {
 
     }
 
+    final static akka.japi.function.Function<Throwable, Supervision.Directive> decider =
+            exc -> {
+                log.log(Level.SEVERE, "Error:"+exc.getMessage());
+                if (exc instanceof Exception) {
+                    log.log(Level.SEVERE, "Error Parsing Class");
+                    return (Supervision.Directive) Supervision.resume();
+                } else {
+                    return (Supervision.Directive) Supervision.stop();
+                }
+            };
+
 
     private void writeJson(Flow<ByteString, ByteString, CompletionStage<Tcp.OutgoingConnection>> connection, String json) {
 
         log.fine(String.format("write: %s", json));
 
-        Source<ByteString, NotUsed> source = Source.single(json).map(i -> ByteString.fromString(json));
-        Source<ByteString, NotUsed> reply = source.via(connection);
-
-        reply
-                .recoverWithRetries(retries,
-                        new PFBuilder().match(RuntimeException.class, ex -> source).build()
-                )
+        Source.single(json).map(i -> ByteString.fromString(json)).via(connection)
+                .withAttributes(ActorAttributes.withSupervisionStrategy(decider))
                 .toMat(Sink.foreach(ThinkGearConnector::process), Keep.right())
                 .run(materializer);
 

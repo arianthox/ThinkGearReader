@@ -2,6 +2,7 @@ package com.globant.brainwaves.client;
 
 import com.globant.brainwaves.commons.model.BufferRawPacket;
 import com.globant.brainwaves.commons.model.ChannelPacket;
+import com.globant.brainwaves.commons.model.Packet;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;
