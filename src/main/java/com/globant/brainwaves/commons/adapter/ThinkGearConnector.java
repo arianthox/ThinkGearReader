@@ -2,7 +2,6 @@ package com.globant.brainwaves.commons.adapter;
 
 
 import akka.actor.ActorSystem;
-import akka.japi.pf.PFBuilder;
 import akka.stream.ActorAttributes;
 import akka.stream.ActorMaterializer;
 import akka.stream.Materializer;
@@ -38,7 +37,7 @@ import static io.vavr.API.*;
 @Log
 @Component
 public class ThinkGearConnector {
-    
+
     private static Gson gson = new Gson();
 
     private static List<EventListener> listeners = new ArrayList<>();
@@ -57,7 +56,7 @@ public class ThinkGearConnector {
     private static final BiPredicate<Function<RawPacket, Boolean>, RawPacket> isRawBufferReady = (rawPacketBooleanFunction, rawPacket) -> rawPacketBooleanFunction.apply(rawPacket);
 
     private static final Consumer<? super Packet> processConsumer = packet -> {
-        log.log(packet.getLogLevel(), String.format("%s [%s]",  packet.getClass().getSimpleName(), packet));
+        log.log(packet.getLogLevel(), String.format("%s [%s]", packet.getClass().getSimpleName(), packet));
         listeners.forEach(eventListener -> eventListener.processPacket(packet));
     };
 
@@ -118,7 +117,9 @@ public class ThinkGearConnector {
 
     private transient CoreEngineClient coreEngineClient;
 
-    private final static String sessionId=UUID.randomUUID().toString();
+    private transient KafkaProducer kafkaProducer;
+
+    private final static String sessionId = UUID.randomUUID().toString();
 
 
     private ThinkGearConnector(String appName, String SHA_1) {
@@ -127,9 +128,10 @@ public class ThinkGearConnector {
     }
 
     @Autowired
-    public ThinkGearConnector(CoreEngineClient coreEngineClient) {
+    public ThinkGearConnector(KafkaProducer kafkaProducer, CoreEngineClient coreEngineClient) {
         this(ThinkGearReaderApplication.class.getName(), DigestUtils.sha1Hex(ThinkGearReaderApplication.class.getName()));
         this.coreEngineClient = coreEngineClient;
+        this.kafkaProducer = kafkaProducer;
     }
 
     @PostConstruct
@@ -139,12 +141,16 @@ public class ThinkGearConnector {
         start();
         this.registerEventHandler(p -> {
             try {
-                if (p instanceof BufferRawPacket) {
-                    coreEngineClient.receive("ThinkGearReader",sessionId, (BufferRawPacket) p);
-                }else if(p instanceof ChannelPacket){
-                    coreEngineClient.receive("ThinkGearReader",sessionId, (ChannelPacket) p);
+                if (!(p instanceof RawPacket)) {
+
+                    kafkaProducer.send("think-gear-topic",
+                            WavePacket.builder().deviceId(this.sha_1).sessionId(sessionId).packet(p).build()
+                            , done -> {
+                                log.log(Level.FINE, "Message sent [{0}]", Arrays.asList(p.toString()));
+                            });
                 }
-            }catch (Exception ex){
+
+            } catch (Exception ex) {
                 log.warning(ex.getMessage());
             }
 
@@ -177,7 +183,7 @@ public class ThinkGearConnector {
 
     final static akka.japi.function.Function<Throwable, Supervision.Directive> decider =
             exc -> {
-                log.log(Level.SEVERE, "Error:"+exc.getMessage());
+                log.log(Level.SEVERE, "Error:" + exc.getMessage());
                 if (exc instanceof Exception) {
                     log.log(Level.SEVERE, "Error Parsing Class");
                     return (Supervision.Directive) Supervision.resume();
@@ -188,9 +194,6 @@ public class ThinkGearConnector {
 
 
     private void writeJson(Flow<ByteString, ByteString, CompletionStage<Tcp.OutgoingConnection>> connection, String json) {
-
-        log.fine(String.format("write: %s", json));
-
         Source.single(json).map(i -> ByteString.fromString(json)).via(connection)
                 .withAttributes(ActorAttributes.withSupervisionStrategy(decider))
                 .toMat(Sink.foreach(ThinkGearConnector::process), Keep.right())

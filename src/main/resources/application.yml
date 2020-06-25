@@ -7,6 +7,13 @@ spring:
     name: ThinkGearReader
   main:
     allow-bean-definition-overriding: true
+  kafka:
+    bootstrap-servers: broker:9092
+    consumer:
+      group-id: waves
+    template:
+      default-topic: raw
+
 
 
 CoreEngine:
@@ -46,3 +53,4 @@ logging:
   level:
     root: info
     com.globant.brainwaves.adapter: info
+    org.apache.kafka: error
