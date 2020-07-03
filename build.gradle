@@ -48,6 +48,12 @@ dependencies {
     implementation 'org.springframework.cloud:spring-cloud-starter-openfeign'
     implementation 'org.json:json:20190722'
     implementation project(":commons")
+
+    implementation("org.springframework.boot:spring-boot-starter-data-jpa"){
+        exclude group: "org.apache.tomcat", module: "tomcat-jdbc"
+    }
+    runtimeOnly 'com.h2database:h2'
+
     implementation 'com.google.code.gson:gson:2.8.0'
     implementation 'net.sf.bluecove:bluecove:2.1.0'
     implementation 'org.rxtx:rxtx:2.1.7'

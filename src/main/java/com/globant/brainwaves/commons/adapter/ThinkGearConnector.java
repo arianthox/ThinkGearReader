@@ -143,10 +143,10 @@ public class ThinkGearConnector {
             try {
                 if (!(p instanceof RawPacket)) {
 
-                    kafkaProducer.send("think-gear-topic",
-                            WavePacket.builder().deviceId(this.sha_1).sessionId(sessionId).packet(p).build()
+                    kafkaProducer.send(TopicID.THINK_GEAR_READER,
+                            p.toWave().deviceId(this.sha_1).sessionId(sessionId).build()
                             , done -> {
-                                log.log(Level.FINE, "Message sent [{0}]", Arrays.asList(p.toString()));
+                                log.log(Level.INFO, "Message sent Topic[{0}] [{1}]", Arrays.asList(TopicID.THINK_GEAR_READER.toString(),p.toString()));
                             });
                 }
 
