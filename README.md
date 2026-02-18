@@ -1,73 +1,47 @@
 # ThinkGearReader
-===========================================
 
-The purpose of this project is to provide a reader interface for ThinkGear Adapter
+## Overview
 
+Legacy ingestion service that connects to the ThinkGear Adapter, parses NeuroSky packets, and publishes brainwave events to Kafka.
 
-Technologies
-------------
+## Scope in BrainWaves
 
-+ java
-+ Spring
-+ docker
-+ gradle
+- In-scope as compatibility ingestion path
+- Main produced topic: `think_gear_reader`
+- Primary consumer: `ThinkGearReaderFX`
 
-Prerequisites
---------------
+## Tech Stack
 
+- Java 11
+- Spring Boot 2.2.x
+- Akka Streams
+- Kafka
+- Gradle
 
-How To Compile
---------------
+## Build
 
-The service can be compiled with:
-
-```
-gradle clean build
-```
-
-
-How To Run
---------------
-
-The service can be executed with:
-
-```
-gradle bootRun
+```bash
+./gradlew clean build
 ```
 
+## Run
 
-Successful compilation conditions
---------------
-This project uses pmd, findbugs, jacoco to guaranty the quality of the code.
-
-In addition there is a jacoco task that is attached to the build lifecycle that prevents the successful compilation of the project if there is no enought unit test code coverage.
-
-The current minimun coverage percentage is: 80 %
-
-
-Simulating BrainWaves
----------------------
-
-Thought Kafka console consumer/producer is it possible to capture and replicate the waves Flow, republishing samples 
-to the kafka topic [think_gear_reader]
-
-**List Topics from Broker**
-```
-./bin/kafka-topics --zookeeper localhost:2181 --list
+```bash
+./gradlew bootRun
 ```
 
-**Create a Kafka Consumer to Capture some samples**
-```
-./bin/kafka-console-consumer --bootstrap-server localhost:9092 --topic think_gear_reader
-```
+## Key Configuration / Integration
 
-**Saving samples to file**
-```
-./bin/kafka-console-consumer --bootstrap-server localhost:9092 --topic think_gear_reader > waves.samples
-```
+- Config file: `src/main/resources/application.yml`
+- Important keys:
+  - `spring.kafka.bootstrap-servers`
+  - `think-gear-connector.host`
+  - `think-gear-connector.port`
+  - `think-gear-connector.raw`
+- Cross-repo dependency: `:commons` via `settings.gradle` (legacy path expectation: `../Commons`)
 
-**Publishing samples into the topic**
-```
-./bin/kafka-console-producer --broker-list localhost:9092 --topic think_gear_reader < waves.samples
-```
+## Status / Notes
+
+- Keep running during migration.
+- New architecture should dual-publish to canonical `brainwaves.*` topics while preserving legacy stream behavior.
 
